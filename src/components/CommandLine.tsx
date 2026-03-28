@@ -20,7 +20,24 @@ export function CommandLine({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // Focus immediately
     inputRef.current?.focus();
+
+    // Re-focus on any click anywhere in the page
+    const handleClick = () => {
+      setTimeout(() => inputRef.current?.focus(), 0);
+    };
+    // Re-focus when window regains focus
+    const handleFocus = () => {
+      setTimeout(() => inputRef.current?.focus(), 0);
+    };
+
+    window.addEventListener('click', handleClick);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('click', handleClick);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
