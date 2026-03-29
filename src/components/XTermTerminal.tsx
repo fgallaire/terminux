@@ -1,23 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { executeCommand } from '../utils/commands';
 
 export function XTermTerminal() {
   const termRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const [currentPath, setCurrentPath] = useState('/home/user');
   const currentPathRef = useRef('/home/user');
   const commandHistoryRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
   const currentLineRef = useRef('');
+  const [, setCurrentPath] = useState('/home/user');
 
-  useEffect(() => {
-    currentPathRef.current = currentPath;
-  }, [currentPath]);
+  const updatePath = (p: string) => {
+    currentPathRef.current = p;
+    setCurrentPath(p);
+  };
 
   useEffect(() => {
     if (!termRef.current) return;
@@ -52,32 +51,28 @@ export function XTermTerminal() {
       lineHeight: 1.2,
       cursorBlink: true,
       cursorStyle: 'block',
-      allowProposedApi: true,
       scrollback: 1000,
+      disableStdin: false,
     });
 
     const fitAddon = new FitAddon();
-    const webLinksAddon = new WebLinksAddon();
-
     term.loadAddon(fitAddon);
-    term.loadAddon(webLinksAddon);
     term.open(termRef.current);
 
-    fitAddon.fit();
-    xtermRef.current = term;
-    fitAddonRef.current = fitAddon;
+    setTimeout(() => {
+      try { fitAddon.fit(); } catch {}
+    }, 50);
 
-    // Welcome message
+    xtermRef.current = term;
+
     term.writeln('Welcome to Retro Linux!');
     term.writeln('Type "help" for available commands.');
     term.writeln('');
     writePrompt(term);
 
-    // Handle input
-    term.onKey(({ key, domEvent }) => {
-      const ev = domEvent;
-
-      if (ev.key === 'Enter') {
+    term.onData((data) => {
+      if (data === '\r') {
+        // Enter
         term.writeln('');
         const line = currentLineRef.current;
         if (line.trim()) {
@@ -86,7 +81,7 @@ export function XTermTerminal() {
 
           const result = executeCommand(line, {
             currentPath: currentPathRef.current,
-            setCurrentPath,
+            setCurrentPath: updatePath,
             commandHistory: [...commandHistoryRef.current],
           });
 
@@ -96,20 +91,20 @@ export function XTermTerminal() {
             if (result.error) {
               term.writeln(`\x1b[31m${result.output}\x1b[0m`);
             } else {
-              const lines = result.output.split('\n');
-              lines.forEach((l) => term.writeln(l));
+              result.output.split('\n').forEach((l) => term.writeln(l));
             }
           }
         }
         currentLineRef.current = '';
         writePrompt(term);
-      } else if (ev.key === 'Backspace') {
+      } else if (data === '\x7f') {
+        // Backspace
         if (currentLineRef.current.length > 0) {
           currentLineRef.current = currentLineRef.current.slice(0, -1);
           term.write('\b \b');
         }
-      } else if (ev.key === 'ArrowUp') {
-        ev.preventDefault();
+      } else if (data === '\x1b[A') {
+        // Arrow Up
         const history = commandHistoryRef.current;
         if (history.length === 0) return;
         if (historyIndexRef.current === -1) {
@@ -118,8 +113,8 @@ export function XTermTerminal() {
           historyIndexRef.current--;
         }
         replaceLine(term, history[historyIndexRef.current]);
-      } else if (ev.key === 'ArrowDown') {
-        ev.preventDefault();
+      } else if (data === '\x1b[B') {
+        // Arrow Down
         const history = commandHistoryRef.current;
         if (historyIndexRef.current === -1) return;
         historyIndexRef.current++;
@@ -129,24 +124,18 @@ export function XTermTerminal() {
         } else {
           replaceLine(term, history[historyIndexRef.current]);
         }
-      } else if (ev.ctrlKey && ev.key === 'c') {
+      } else if (data === '\x03') {
+        // Ctrl+C
         term.writeln('^C');
         currentLineRef.current = '';
         writePrompt(term);
-      } else if (ev.ctrlKey && ev.key === 'l') {
+      } else if (data === '\x0c') {
+        // Ctrl+L
         term.clear();
         currentLineRef.current = '';
         writePrompt(term);
-      } else if (!ev.ctrlKey && !ev.altKey && !ev.metaKey && key.length === 1) {
-        currentLineRef.current += key;
-        term.write(key);
-      }
-    });
-
-    // Handle paste
-    term.onData((data) => {
-      // Only handle paste (multi-char data that isn't a control sequence)
-      if (data.length > 1 && !data.startsWith('\x1b')) {
+      } else if (data >= ' ' || data.length > 1 && !data.startsWith('\x1b')) {
+        // Printable chars or pasted text
         currentLineRef.current += data;
         term.write(data);
       }
@@ -155,9 +144,10 @@ export function XTermTerminal() {
     // Auto focus
     term.focus();
     const handleClick = () => term.focus();
+    const handleWindowFocus = () => term.focus();
     window.addEventListener('click', handleClick);
+    window.addEventListener('focus', handleWindowFocus);
 
-    // Resize
     const handleResize = () => {
       try { fitAddon.fit(); } catch {}
     };
@@ -165,6 +155,7 @@ export function XTermTerminal() {
 
     return () => {
       window.removeEventListener('click', handleClick);
+      window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('resize', handleResize);
       term.dispose();
     };
@@ -176,7 +167,6 @@ export function XTermTerminal() {
   }
 
   function replaceLine(term: Terminal, newLine: string) {
-    // Clear current line content
     const len = currentLineRef.current.length;
     for (let i = 0; i < len; i++) term.write('\b \b');
     currentLineRef.current = newLine;
