@@ -1,11 +1,9 @@
 import { useState } from 'react';
 import { BootSequence } from '@/components/BootSequence';
-import { V86Terminal } from '@/components/V86Terminal';
-import { SimulatedTerminal } from '@/components/SimulatedTerminal';
+import { XTermTerminal } from '@/components/XTermTerminal';
 
 const Index = () => {
   const [bootComplete, setBootComplete] = useState(false);
-  const [useSimulated, setUseSimulated] = useState(false);
 
   return (
     <div className="crt-screen">
@@ -13,10 +11,8 @@ const Index = () => {
       <div className="crt-content w-full h-full">
         {!bootComplete ? (
           <BootSequence onComplete={() => setBootComplete(true)} />
-        ) : useSimulated ? (
-          <SimulatedTerminal />
         ) : (
-          <V86Terminal onFallback={() => setUseSimulated(true)} />
+          <XTermTerminal />
         )}
       </div>
     </div>
